@@ -1,4 +1,4 @@
-import type { MinerState } from '../../shared/types/game';
+import type { MinerState } from '@shared/types/game';
 
 const CLUE_FNS = [
   (miners: MinerState[], round: number) => {

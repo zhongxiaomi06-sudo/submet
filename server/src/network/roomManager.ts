@@ -1,6 +1,6 @@
 import { v4 as uuid } from 'uuid';
 import { GameEngine } from '../game/GameEngine';
-import type { PlayerState, RoleId } from '../../shared/types/game';
+import type { PlayerState, RoleId } from '@shared/types/game';
 
 interface RoomPlayer {
   socketId: string;
@@ -51,7 +51,7 @@ export class RoomManager {
     if (room.gameStarted) return { success: false, error: 'Game already started' };
 
     const playerId = uuid().slice(0, 8);
-    let role: RoleId;
+    let role: RoleId | null = null;
 
     if (preferredRole && this.canAssignRole(room, preferredRole)) {
       role = preferredRole;

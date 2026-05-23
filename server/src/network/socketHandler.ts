@@ -1,6 +1,7 @@
 import { Server as SocketIOServer, Socket } from 'socket.io';
+import { v4 as uuid } from 'uuid';
 import type { RoomManager } from './roomManager';
-import type { MinerState, PlayerState, ValidatorState, SubnetOwnerState } from '../../shared/types/game';
+import type { MinerState, PlayerState, ValidatorState, SubnetOwnerState } from '@shared/types/game';
 import { CONFIG } from '../config';
 import { botMinerDecide, botValidatorScore, botValidatorReports, botOwnerAudit } from '../bot/BotPlayer';
 import { calculateOwnerWeight } from '../game/VoteManager';
@@ -37,6 +38,9 @@ const ROLE_CONFIG: Array<{ role: string; count: number }> = [
 ];
 
 const TOTAL_SLOTS = 8;
+
+const voiceParticipantsByRoom = new Map<string, Set<string>>();
+const voiceBySocket = new Map<string, { roomId: string; playerId: string }>();
 
 function broadcastState(io: SocketIOServer, room: any, engine: any, session: any): void {
   const sessionId = session.sessionId;
@@ -84,10 +88,47 @@ function startGameLoop(io: SocketIOServer, room: any, engine: any, rm: RoomManag
     io.to(room.roomId).emit('game:phase_changed', phaseView);
   });
 }
+function getOrCreateVoiceSet(roomId: string): Set<string> {
+  const existing = voiceParticipantsByRoom.get(roomId);
+  if (existing) return existing;
+  const set = new Set<string>();
+  voiceParticipantsByRoom.set(roomId, set);
+  return set;
+}
+
+function emitVoiceParticipants(io: SocketIOServer, roomId: string): void {
+  const set = voiceParticipantsByRoom.get(roomId) ?? new Set<string>();
+  io.to(roomId).emit('voice:participants', { participants: Array.from(set.values()) });
+}
+
+function tryFastForwardDeclaration(io: SocketIOServer, room: any, engine: any, rm: RoomManager, sessionId: string): void {
+  const session = engine.getSession(sessionId);
+  if (session.phase !== 'declaration') return;
+
+  const miners = Object.values(session.players).filter((p: any) => p.role === 'miner' && p.isAlive) as MinerState[];
+  for (const miner of miners) {
+    const rd = miner.roundData.find((r: any) => r.round === session.round);
+    if (!rd || rd.declaredQuality !== null) continue;
+    if (miner.playerType === 'bot') {
+      const declared = botMinerDecide(rd.trueQuality, session.round);
+      engine.submitDeclaration(sessionId, miner.playerId, declared);
+    }
+  }
+
+  const allDeclared = miners.every((miner) => {
+    const rd = miner.roundData.find((r: any) => r.round === session.round);
+    return !!rd && rd.declaredQuality !== null;
+  });
+  if (!allDeclared) return;
+
+  engine.advancePhase(sessionId);
+  broadcastState(io, room, engine, engine.getSession(sessionId));
+  startGameLoop(io, room, engine, rm, sessionId);
+}
+
 
 export function setupSocketHandlers(io: SocketIOServer, rm: RoomManager): void {
   io.on('connection', (socket: Socket) => {
-    console.log(`Socket connected: ${socket.id}`);
 
     socket.on('room:join', ({ roomId, preferredRole }: { roomId: string; preferredRole?: string }) => {
       const result = rm.joinRoom(roomId, socket.id, preferredRole as any);
@@ -157,6 +198,8 @@ export function setupSocketHandlers(io: SocketIOServer, rm: RoomManager): void {
       if (!sessionId) return;
 
       engine.submitDeclaration(sessionId, info.playerId, declaredQuality);
+      broadcastState(io, info.room, engine, engine.getSession(sessionId));
+      tryFastForwardDeclaration(io, info.room, engine, rm, sessionId);
     });
 
     socket.on('player:score', ({ scores, reportMinerIds }: { scores: Record<string, number>; reportMinerIds?: string[] }) => {
@@ -167,6 +210,7 @@ export function setupSocketHandlers(io: SocketIOServer, rm: RoomManager): void {
       if (!sessionId) return;
 
       engine.submitScores(sessionId, info.playerId, scores, reportMinerIds ?? []);
+      broadcastState(io, info.room, engine, engine.getSession(sessionId));
     });
 
     socket.on('player:audit', ({ minerIds, depth }: { minerIds: string[]; depth?: 'shallow' | 'deep' }) => {
@@ -188,6 +232,7 @@ export function setupSocketHandlers(io: SocketIOServer, rm: RoomManager): void {
           auditDepth: result.auditDepth,
         });
       }
+      broadcastState(io, room, engine, engine.getSession(sessionId));
     });
 
     socket.on('player:ai_analysis', ({ level, isPublic }: { level: 'low' | 'mid' | 'high'; isPublic: boolean }) => {
@@ -216,6 +261,7 @@ export function setupSocketHandlers(io: SocketIOServer, rm: RoomManager): void {
       if (!sessionId) return;
 
       engine.castVote(sessionId, info.playerId, vote);
+      broadcastState(io, info.room, engine, engine.getSession(sessionId));
     });
 
     socket.on('player:next_phase', () => {
@@ -226,10 +272,91 @@ export function setupSocketHandlers(io: SocketIOServer, rm: RoomManager): void {
       if (!sessionId) return;
 
       engine.advancePhase(sessionId);
+      broadcastState(io, info.room, engine, engine.getSession(sessionId));
+      startGameLoop(io, info.room, engine, rm, sessionId);
+    });
+
+    socket.on('chat:send', ({ channel, toPlayerId, content }: { channel: 'public' | 'direct'; toPlayerId?: string; content: string }) => {
+      const info = rm.getPlayerInfoInRoom(socket.id);
+      if (!info) return;
+      const message = {
+        messageId: uuid(),
+        channel,
+        fromPlayerId: info.playerId,
+        toPlayerId,
+        content,
+        timestamp: Date.now(),
+      };
+
+      if (channel === 'direct' && toPlayerId) {
+        const target = info.room.players.get(toPlayerId);
+        if (target) io.to(target.socketId).emit('chat:message', message);
+        io.to(socket.id).emit('chat:message', message);
+        return;
+      }
+
+      io.to(info.room.roomId).emit('chat:message', message);
+    });
+
+    socket.on('voice:join', () => {
+      const info = rm.getPlayerInfoInRoom(socket.id);
+      if (!info) return;
+      const engine = rm.getGameEngine();
+      const sessionId = info.room.sessionId;
+      if (!sessionId) {
+        socket.emit('voice:error', { message: 'Game not started' });
+        return;
+      }
+      const session = engine.getSession(sessionId);
+      if (session.phase !== 'trading') {
+        socket.emit('voice:error', { message: 'Voice is only available during discussion phase' });
+        return;
+      }
+
+      socket.join(info.room.roomId);
+      socket.join(`voice:${info.room.roomId}`);
+      voiceBySocket.set(socket.id, { roomId: info.room.roomId, playerId: info.playerId });
+      const set = getOrCreateVoiceSet(info.room.roomId);
+      set.add(info.playerId);
+      emitVoiceParticipants(io, info.room.roomId);
+    });
+
+    socket.on('voice:leave', () => {
+      const existing = voiceBySocket.get(socket.id);
+      if (!existing) return;
+      voiceBySocket.delete(socket.id);
+      const set = voiceParticipantsByRoom.get(existing.roomId);
+      if (set) {
+        set.delete(existing.playerId);
+        if (set.size === 0) voiceParticipantsByRoom.delete(existing.roomId);
+      }
+      socket.leave(`voice:${existing.roomId}`);
+      emitVoiceParticipants(io, existing.roomId);
+    });
+
+    socket.on('voice:signal', ({ to, data }: { to: string; data: any }) => {
+      const existing = voiceBySocket.get(socket.id);
+      if (!existing) return;
+      const { roomId, playerId } = existing;
+      const room = rm.getRoom(roomId);
+      if (!room) return;
+      const target = room.players.get(to);
+      if (!target) return;
+      io.to(target.socketId).emit('voice:signal', { from: playerId, data });
     });
 
     socket.on('disconnect', () => {
       console.log(`Socket disconnected: ${socket.id}`);
+      const existing = voiceBySocket.get(socket.id);
+      if (existing) {
+        voiceBySocket.delete(socket.id);
+        const set = voiceParticipantsByRoom.get(existing.roomId);
+        if (set) {
+          set.delete(existing.playerId);
+          if (set.size === 0) voiceParticipantsByRoom.delete(existing.roomId);
+        }
+        emitVoiceParticipants(io, existing.roomId);
+      }
     });
   });
 }

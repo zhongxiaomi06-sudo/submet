@@ -1,11 +1,20 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useGameState } from '../../hooks/useGameState';
-import { defectTraitor, offerTraitorContract, respondTraitorContract, revealTraitor, sendChatMessage } from '../../socket/socketClient';
+import { defectTraitor, getSocket, offerTraitorContract, respondTraitorContract, revealTraitor, sendChatMessage } from '../../socket/socketClient';
 
 export default function TradingPhase() {
   const { myRole, view, sessionId, chatMessages, traitorContracts, myPlayerId } = useGameState();
   const [chatText, setChatText] = useState('');
   const [directTarget, setDirectTarget] = useState<string>('');
+
+  const [voiceJoined, setVoiceJoined] = useState(false);
+  const voiceJoinedRef = useRef(false);
+  const [voiceParticipants, setVoiceParticipants] = useState<string[]>([]);
+  const [voiceError, setVoiceError] = useState('');
+  const [remoteStreams, setRemoteStreams] = useState<Array<{ playerId: string; stream: MediaStream }>>([]);
+  const localStreamRef = useRef<MediaStream | null>(null);
+  const peerConnectionsRef = useRef<Record<string, RTCPeerConnection>>({});
+  const negotiatedRef = useRef<Set<string>>(new Set());
 
   const [contractTarget, setContractTarget] = useState<string>('');
   const [contractBribe, setContractBribe] = useState<number>(2);
@@ -35,6 +44,164 @@ export default function TradingPhase() {
     offerTraitorContract(sessionId, { targetId: contractTarget, bribe: contractBribe, task: contractTask });
   };
 
+  const closeVoice = () => {
+    for (const pc of Object.values(peerConnectionsRef.current)) {
+      pc.close();
+    }
+    peerConnectionsRef.current = {};
+    negotiatedRef.current = new Set();
+    for (const t of localStreamRef.current?.getTracks() ?? []) {
+      t.stop();
+    }
+    localStreamRef.current = null;
+    setRemoteStreams([]);
+    setVoiceParticipants([]);
+    setVoiceJoined(false);
+  };
+
+  const ensurePeerConnection = (peerId: string): RTCPeerConnection => {
+    const existing = peerConnectionsRef.current[peerId];
+    if (existing) return existing;
+
+    const pc = new RTCPeerConnection({
+      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+    });
+
+    const local = localStreamRef.current;
+    if (local) {
+      for (const track of local.getTracks()) {
+        pc.addTrack(track, local);
+      }
+    }
+
+    pc.onicecandidate = (ev) => {
+      if (!ev.candidate) return;
+      getSocket().emit('voice:signal', {
+        to: peerId,
+        data: { type: 'ice', candidate: ev.candidate },
+      });
+    };
+
+    pc.ontrack = (ev) => {
+      const [stream] = ev.streams;
+      if (!stream) return;
+      setRemoteStreams((prev) => {
+        const existing = prev.find((s) => s.playerId === peerId);
+        if (existing) return prev;
+        return [...prev, { playerId: peerId, stream }];
+      });
+    };
+
+    peerConnectionsRef.current[peerId] = pc;
+    return pc;
+  };
+
+  useEffect(() => {
+    voiceJoinedRef.current = voiceJoined;
+  }, [voiceJoined]);
+
+  useEffect(() => {
+    const sock = getSocket();
+
+    const onParticipants = ({ participants }: { participants: string[] }) => {
+      setVoiceParticipants(participants);
+      if (!myPlayerId) return;
+      if (!voiceJoinedRef.current) return;
+
+      for (const pid of participants) {
+        if (pid === myPlayerId) continue;
+        ensurePeerConnection(pid);
+      }
+
+      for (const pid of participants) {
+        if (pid === myPlayerId) continue;
+        const shouldInitiate = myPlayerId < pid;
+        if (!shouldInitiate) continue;
+        if (negotiatedRef.current.has(pid)) continue;
+        negotiatedRef.current.add(pid);
+        (async () => {
+          const pc = ensurePeerConnection(pid);
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+          sock.emit('voice:signal', {
+            to: pid,
+            data: { type: 'offer', sdp: offer },
+          });
+        })().catch(() => {});
+      }
+    };
+
+    const onSignal = ({ from, data }: { from: string; data: any }) => {
+      if (!voiceJoinedRef.current) return;
+      if (!myPlayerId) return;
+
+      const run = async () => {
+        const pc = ensurePeerConnection(from);
+
+        if (data?.type === 'offer') {
+          await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          sock.emit('voice:signal', { to: from, data: { type: 'answer', sdp: answer } });
+          negotiatedRef.current.add(from);
+          return;
+        }
+
+        if (data?.type === 'answer') {
+          await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+          negotiatedRef.current.add(from);
+          return;
+        }
+
+        if (data?.type === 'ice' && data.candidate) {
+          await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+        }
+      };
+
+      run().catch(() => {});
+    };
+
+    const onVoiceError = ({ message }: { message: string }) => {
+      setVoiceError(message);
+      closeVoice();
+    };
+
+    sock.on('voice:participants', onParticipants);
+    sock.on('voice:signal', onSignal);
+    sock.on('voice:error', onVoiceError);
+
+    return () => {
+      sock.off('voice:participants', onParticipants);
+      sock.off('voice:signal', onSignal);
+      sock.off('voice:error', onVoiceError);
+      if (voiceJoinedRef.current) sock.emit('voice:leave');
+      closeVoice();
+    };
+  }, [myPlayerId]);
+
+  const handleJoinVoice = async () => {
+    setVoiceError('');
+    if (voiceJoined) return;
+    if (!myPlayerId) {
+      setVoiceError('未获取到玩家身份，请重新进入房间');
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      localStreamRef.current = stream;
+      setVoiceJoined(true);
+      getSocket().emit('voice:join');
+    } catch {
+      setVoiceError('无法获取麦克风权限');
+    }
+  };
+
+  const handleLeaveVoice = () => {
+    if (!voiceJoined) return;
+    getSocket().emit('voice:leave');
+    closeVoice();
+  };
+
   return (
     <div className="w-full max-w-5xl">
       <h3 className="text-2xl font-bold mb-6 text-center">契约交易阶段</h3>
@@ -46,6 +213,45 @@ export default function TradingPhase() {
           <p className="text-gray-300">你可以发起契约（贿赂 + 任务）收编其他矿工。</p>
         </div>
       )}
+
+      <div className="bg-gray-800 p-6 rounded-xl border border-gray-700 mb-6">
+        <div className="flex items-center justify-between mb-2">
+          <h4 className="font-bold text-emerald-400">语音讨论</h4>
+          <div className="flex gap-2">
+            {!voiceJoined ? (
+              <button
+                onClick={handleJoinVoice}
+                disabled={!sessionId}
+                className="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 rounded font-bold text-sm"
+              >
+                加入语音
+              </button>
+            ) : (
+              <button
+                onClick={handleLeaveVoice}
+                className="px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded font-bold text-sm"
+              >
+                离开语音
+              </button>
+            )}
+          </div>
+        </div>
+        <div className="text-xs text-gray-400">
+          参与人数: {voiceParticipants.length || (voiceJoined ? 1 : 0)} / 8
+        </div>
+        {voiceError && <div className="mt-2 text-sm text-red-400">{voiceError}</div>}
+        <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2">
+          {remoteStreams.map((rs) => (
+            <div key={rs.playerId} className="flex items-center justify-between bg-gray-900/40 border border-gray-700 rounded p-3">
+              <div className="text-sm text-gray-300">{rs.playerId}</div>
+              <audio autoPlay playsInline ref={(el) => { if (el) el.srcObject = rs.stream; }} />
+            </div>
+          ))}
+          {voiceJoined && remoteStreams.length === 0 && (
+            <div className="text-sm text-gray-500">已加入语音，等待其他人加入...</div>
+          )}
+        </div>
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-gray-800 p-6 rounded-xl border border-gray-700 flex flex-col">

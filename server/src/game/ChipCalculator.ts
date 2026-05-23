@@ -1,5 +1,5 @@
 import { CONFIG } from '../config';
-import type { MinerState, ValidatorState } from '../../shared/types/game';
+import type { MinerState, ValidatorState } from '@shared/types/game';
 
 export function calculateRoundDistribution(
   miners: MinerState[],

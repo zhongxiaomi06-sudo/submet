@@ -1,5 +1,5 @@
 import { CONFIG } from '../config';
-import type { SubnetOwnerState } from '../../shared/types/game';
+import type { SubnetOwnerState } from '@shared/types/game';
 
 export function calculateOwnerWeight(owner: SubnetOwnerState): number {
   let w = CONFIG.OWNER_BASE_WEIGHT + CONFIG.OWNER_WEIGHT_PER_CHEAT * owner.confirmedCheats;

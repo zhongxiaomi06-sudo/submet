@@ -1,1 +1,1 @@
-export { CONFIG } from '../../shared/types/game';
+export { CONFIG } from '@shared/types/game';

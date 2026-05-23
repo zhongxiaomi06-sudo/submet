@@ -1,4 +1,4 @@
-import type { MinerState } from '../../shared/types/game';
+import type { MinerState, ValidatorState } from '@shared/types/game';
 import { CONFIG } from '../config';
 
 export function resolveAudit(miner: MinerState, round: number): {
@@ -20,17 +20,20 @@ export function resolveAudit(miner: MinerState, round: number): {
 export function verifyReports(
   miner: MinerState,
   round: number,
-  validators: Array<{ playerId: string; reports: string[]; chips: number }>
+  validators: ValidatorState[]
 ): Array<{ validatorId: string; reward: number }> {
   const rd = miner.roundData.find(r => r.round === round);
   if (!rd || !rd.isCheat) return [];
   return validators
-    .filter(v => v.reports.includes(miner.playerId))
+    .filter((v) => {
+      const vd = v.roundData.find((r) => r.round === round);
+      return (vd?.reports ?? []).includes(miner.playerId);
+    })
     .map(v => ({ validatorId: v.playerId, reward: CONFIG.REPORT_REWARD }));
 }
 
 export function detectCollusion(
-  validator: { playerId: string; roundData: Array<{ scores: Record<string, number>; reports: string[] }> },
+  validator: ValidatorState,
   miners: MinerState[],
   round: number
 ): boolean {

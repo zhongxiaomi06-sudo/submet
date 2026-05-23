@@ -4,7 +4,7 @@ import type {
   MinerState, ValidatorState, SubnetOwnerState,
   RoleId, PlayerType, AuditResultView, AuditRecord, SettlementData,
   AuditDepth, BroadcastEvent, RevealEntry, RoundDistributionData, GameEvent,
-} from '../../shared/types/game';
+} from '@shared/types/game';
 import { CONFIG } from '../config';
 import { generateClues } from './ClueGenerator';
 import { resolveAudit, verifyReports, detectCollusion } from './AuditResolver';

@@ -1,4 +1,4 @@
-import type { GameSession, MinerState } from '../../shared/types/game';
+import type { GameSession, MinerState } from '@shared/types/game';
 import { CONFIG } from '../config';
 
 export function botMinerDecide(trueQuality: number, round: number): number {
@@ -31,7 +31,7 @@ export function botValidatorReports(miners: MinerState[], round: number): string
 }
 
 export function botOwnerAudit(session: GameSession): string[] {
-  const miners = Object.values(session.players).filter(p => p.role === 'miner');
+  const miners = Object.values(session.players).filter((p): p is MinerState => p.role === 'miner');
   if (Math.random() < 0.7) return [];
   const shuffled = [...miners].sort(() => Math.random() - 0.5);
   return shuffled.slice(0, Math.random() < 0.5 ? 1 : 2).map(m => m.playerId);
