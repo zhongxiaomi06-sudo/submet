@@ -4,7 +4,7 @@ import { useGameState } from '../../hooks/useGameState';
 export default function DistributionPhase() {
   const { view } = useGameState();
   const dist = view?.roundDistribution;
-  const miners = view?.players.filter(p => p.role === 'miner').sort((a, b) => b.chips - a.chips) || [];
+  const miners = view?.players.filter(p => p.role === 'miner').sort((a, b) => (b.chips ?? 0) - (a.chips ?? 0)) || [];
   const validators = view?.players.filter(p => p.role === 'validator') || [];
 
   return (
