@@ -1,7 +1,7 @@
 import React from 'react';
 import { useGameStore } from '../../store/gameStore';
 import { useGameState } from '../../hooks/useGameState';
-import { emitScores, emitReports } from '../../socket/socketClient';
+import { emitScores } from '../../socket/socketClient';
 
 export default function ScoringPhase() {
   const { view, myRole, sessionId } = useGameState();
@@ -12,8 +12,7 @@ export default function ScoringPhase() {
   const resetPending = useGameStore((state) => state.resetPending);
 
   const handleSubmit = () => {
-    emitScores(pendingScores);
-    if (pendingReports.length > 0) emitReports(pendingReports);
+    emitScores(pendingScores, pendingReports);
     resetPending();
   };
 

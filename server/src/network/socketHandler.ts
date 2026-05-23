@@ -36,6 +36,55 @@ const ROLE_CONFIG: Array<{ role: string; count: number }> = [
   { role: 'miner', count: 4 },
 ];
 
+const TOTAL_SLOTS = 8;
+
+function broadcastState(io: SocketIOServer, room: any, engine: any, session: any): void {
+  const sessionId = session.sessionId;
+  const remaining = engine.remainingSeconds.get(sessionId) ?? engine.getTimerForPhase(session.phase);
+
+  for (const [pid, pinfo] of room.players) {
+    const view = engine.buildViewState(sessionId, pid, remaining);
+    io.to(pinfo.socketId).emit('state:updated', view);
+
+    if (view.myRole === 'miner' && view.myTrueQuality !== undefined) {
+      io.to(pinfo.socketId).emit('game:miner_quality', { trueQuality: view.myTrueQuality });
+    }
+    if (view.myRole === 'validator' && view.validatorClue) {
+      io.to(pinfo.socketId).emit('game:clue', { clue: view.validatorClue });
+    }
+  }
+
+  const phaseView = {
+    phase: session.phase,
+    remainingSeconds: engine.remainingSeconds.get(sessionId) ?? 0,
+  };
+  io.to(room.roomId).emit('game:phase_changed', phaseView);
+}
+
+function startGameLoop(io: SocketIOServer, room: any, engine: any, rm: RoomManager, sessionId: string): void {
+  const session = engine.getSession(sessionId);
+
+  if (session.phase === 'settlement' || session.phase === 'finished') {
+    broadcastState(io, room, engine, session);
+    return;
+  }
+
+  engine.setPhaseTimeout(sessionId, () => {
+    handlePhaseTimeout(io, room.roomId, engine, rm, sessionId);
+    engine.advancePhase(sessionId);
+    broadcastState(io, room, engine, engine.getSession(sessionId));
+    startGameLoop(io, room, engine, rm, sessionId);
+  });
+
+  engine.startPhaseTimer(sessionId, (remaining: number) => {
+    const phaseView = {
+      phase: session.phase,
+      remainingSeconds: remaining,
+    };
+    io.to(room.roomId).emit('game:phase_changed', phaseView);
+  });
+}
+
 export function setupSocketHandlers(io: SocketIOServer, rm: RoomManager): void {
   io.on('connection', (socket: Socket) => {
     console.log(`Socket connected: ${socket.id}`);
@@ -70,7 +119,7 @@ export function setupSocketHandlers(io: SocketIOServer, rm: RoomManager): void {
       }
 
       const totalHumans = players.length;
-      const remainingSlots = 7 - totalHumans;
+      const remainingSlots = TOTAL_SLOTS - totalHumans;
 
       for (let i = 0; i < remainingSlots; i++) {
         const botId = `bot_${i + 1}`;
@@ -92,55 +141,12 @@ export function setupSocketHandlers(io: SocketIOServer, rm: RoomManager): void {
       room.sessionId = session.sessionId;
       room.gameStarted = true;
 
-      const phase = engine.advancePhase(session.sessionId);
+      engine.advancePhase(session.sessionId);
+      broadcastState(io, room, engine, session);
 
-      function broadcastState() {
-        const remaining = engine.remainingSeconds.get(session.sessionId) ?? engine.getTimerForPhase(session.phase);
-        for (const [pid, pinfo] of room.players) {
-          const view = engine.buildViewState(session.sessionId, pid, remaining);
-          io.to(pinfo.socketId).emit('state:updated', view);
+      startGameLoop(io, room, engine, rm, session.sessionId);
 
-          if (view.myRole === 'miner' && view.myTrueQuality !== undefined) {
-            io.to(pinfo.socketId).emit('game:miner_quality', { trueQuality: view.myTrueQuality });
-          }
-          if (view.myRole === 'validator' && view.validatorClue) {
-            io.to(pinfo.socketId).emit('game:clue', { clue: view.validatorClue });
-          }
-        }
-
-        const phaseView = {
-          phase: session.phase,
-          remainingSeconds: engine.remainingSeconds.get(session.sessionId) ?? 0,
-        };
-        io.to(room.roomId).emit('game:phase_changed', phaseView);
-      }
-
-      broadcastState();
-
-      engine.setPhaseTimeout(session.sessionId, () => {
-        handlePhaseTimeout(io, room.roomId, engine, rm, session.sessionId);
-        if (session.phase !== 'settlement' && session.phase !== 'finished') {
-          const newPhase = engine.advancePhase(session.sessionId);
-          broadcastState();
-          engine.startPhaseTimer(session.sessionId, () => {
-            handlePhaseTimeout(io, room.roomId, engine, rm, session.sessionId);
-            if (session.phase !== 'settlement' && session.phase !== 'finished') {
-              engine.advancePhase(session.sessionId);
-              broadcastState();
-            }
-          });
-        }
-      });
-
-      engine.startPhaseTimer(session.sessionId, (remaining) => {
-        const phaseView = {
-          phase: session.phase,
-          remainingSeconds: remaining,
-        };
-        io.to(room.roomId).emit('game:phase_changed', phaseView);
-      });
-
-      io.to(room.roomId).emit('game:started', { sessionId: session.sessionId, phase });
+      io.to(room.roomId).emit('game:started', { sessionId: session.sessionId, phase: session.phase });
     });
 
     socket.on('player:declare', ({ declaredQuality }: { declaredQuality: number }) => {
@@ -153,24 +159,14 @@ export function setupSocketHandlers(io: SocketIOServer, rm: RoomManager): void {
       engine.submitDeclaration(sessionId, info.playerId, declaredQuality);
     });
 
-    socket.on('player:score', ({ scores }: { scores: Record<string, number> }) => {
+    socket.on('player:score', ({ scores, reportMinerIds }: { scores: Record<string, number>; reportMinerIds?: string[] }) => {
       const info = rm.getPlayerInfoInRoom(socket.id);
       if (!info) return;
       const engine = rm.getGameEngine();
       const sessionId = info.room.sessionId;
       if (!sessionId) return;
 
-      engine.submitScores(sessionId, info.playerId, scores, []);
-    });
-
-    socket.on('player:report', ({ minerIds }: { minerIds: string[] }) => {
-      const info = rm.getPlayerInfoInRoom(socket.id);
-      if (!info) return;
-      const engine = rm.getGameEngine();
-      const sessionId = info.room.sessionId;
-      if (!sessionId) return;
-
-      engine.submitScores(sessionId, info.playerId, {}, minerIds);
+      engine.submitScores(sessionId, info.playerId, scores, reportMinerIds ?? []);
     });
 
     socket.on('player:audit', ({ minerIds, depth }: { minerIds: string[]; depth?: 'shallow' | 'deep' }) => {

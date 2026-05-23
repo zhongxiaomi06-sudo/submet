@@ -180,6 +180,7 @@ export interface PlayerViewState {
   contractPassed?: boolean;
   revealData?: RevealEntry[];
   kickedPlayers?: Array<{ playerId: string; reason: string }>;
+  roundDistribution?: RoundDistributionData;
   settlement?: SettlementData;
   myTaotaoReward?: number;
   myTaotaoNet?: number;
@@ -219,6 +220,11 @@ export interface RevealEntry {
   isCheat: boolean;
   penaltyType: 'process' | 'reveal' | 'deep_audit' | 'none';
   penaltyAmount: number;
+}
+
+export interface RoundDistributionData {
+  minerRewards: Record<string, number>;
+  validatorRewards: Record<string, number>;
 }
 
 export interface SettlementData {

@@ -3,7 +3,7 @@ import type {
   GameSession, GamePhase, PlayerState, PlayerViewState,
   MinerState, ValidatorState, SubnetOwnerState,
   RoleId, PlayerType, AuditResultView, AuditRecord, SettlementData,
-  AuditDepth,
+  AuditDepth, BroadcastEvent, RevealEntry, RoundDistributionData, GameEvent,
 } from '../../shared/types/game';
 import { CONFIG } from '../config';
 import { generateClues } from './ClueGenerator';
@@ -122,6 +122,15 @@ export class GameEngine {
     if (!rd) return;
     rd.declaredQuality = declaredQuality;
     rd.isCheat = declaredQuality > rd.trueQuality;
+    session.eventLog.push({
+      type: 'miner_declared',
+      minerId,
+      declared: declaredQuality,
+      true: rd.trueQuality,
+      isCheat: rd.isCheat,
+      round: session.round,
+      timestamp: Date.now(),
+    });
   }
 
   private startScoring(session: GameSession): GamePhase {
@@ -147,6 +156,19 @@ export class GameEngine {
     rd.reports = reports;
     rd.reportsCost = reports.length * CONFIG.REPORT_COST;
     validator.chips -= rd.reportsCost;
+
+    for (const [minerId, score] of Object.entries(scores)) {
+      session.eventLog.push({
+        type: 'validator_scored',
+        validatorId, minerId, score, round: session.round, timestamp: Date.now(),
+      });
+    }
+    for (const minerId of reports) {
+      session.eventLog.push({
+        type: 'validator_reported',
+        validatorId, minerId, cost: CONFIG.REPORT_COST, round: session.round, timestamp: Date.now(),
+      });
+    }
   }
 
   private startAuditPhase(session: GameSession): GamePhase {
@@ -175,6 +197,14 @@ export class GameEngine {
       const miner = session.players[minerId] as MinerState;
       const { isCheat, trueQuality } = resolveAudit(miner, session.round);
 
+      const auditResult: 'cheat_confirmed' | 'honest_confirmed' = isCheat ? 'cheat_confirmed' : 'honest_confirmed';
+      session.eventLog.push({
+        type: 'owner_audited',
+        minerId, round: session.round, cost: auditCost,
+        result: auditResult,
+        timestamp: Date.now(),
+      });
+
       if (depth === 'deep' && isCheat) {
         const rd = miner.roundData.find(r => r.round === session.round);
         if (rd) {
@@ -197,7 +227,20 @@ export class GameEngine {
           reportRewards.push({ validatorId: r.validatorId, amount: r.reward });
           const v = validators.find(v => v.playerId === r.validatorId);
           if (v) v.chips += r.reward;
+          session.eventLog.push({
+            type: 'report_reward',
+            validatorId: r.validatorId, minerId,
+            amount: r.reward,
+            timestamp: Date.now(),
+          });
         }
+        session.eventLog.push({
+          type: 'penalty_applied',
+          minerId, round: session.round,
+          amount: CONFIG.CHEAT_PENALTY_PROCESS,
+          penaltyType: 'process',
+          timestamp: Date.now(),
+        });
       } else if (depth === 'shallow' && isCheat && owner) {
         owner.auditHistory.push({
           targetMinerId: minerId, round: session.round,
@@ -245,6 +288,7 @@ export class GameEngine {
       riskScores[miner.playerId] = Math.round(Math.max(5, Math.min(95, baseRisk + noise)));
     }
 
+    (session as any).aiRiskScores = riskScores;
     return riskScores;
   }
 
@@ -271,6 +315,16 @@ export class GameEngine {
       if (v) v.chips += amount;
     }
 
+    (session as any).lastRoundDistribution = { minerRewards, validatorRewards };
+
+    session.eventLog.push({
+      type: 'round_distributed',
+      round: session.round,
+      miners: minerRewards,
+      validators: validatorRewards,
+      timestamp: Date.now(),
+    });
+
     this.setPhase(session, 'distribution');
     return 'distribution';
   }
@@ -291,6 +345,17 @@ export class GameEngine {
             miner.chips -= CONFIG.CHEAT_PENALTY_REVEAL;
             session.publicPool += 1;
           }
+          session.eventLog.push({
+            type: 'reveal_entry',
+            minerId: miner.playerId,
+            round: rd.round,
+            declared: rd.declaredQuality ?? 0,
+            true: rd.trueQuality,
+            isCheat: rd.isCheat,
+            penaltyType: rd.penaltyType,
+            penaltyAmount: rd.penaltyAmount,
+            timestamp: Date.now(),
+          });
         }
       }
     }
@@ -315,6 +380,12 @@ export class GameEngine {
 
     if (!(session as any)._votes) (session as any)._votes = { for: 0, against: 0 };
     (session as any)._votes[vote] += 1;
+
+    session.eventLog.push({
+      type: 'vote_cast',
+      voterId, vote,
+      timestamp: Date.now(),
+    });
   }
 
   getVoteTally(sessionId: string): { for: number; against: number } {
@@ -369,6 +440,12 @@ export class GameEngine {
     const player = session.players[playerId];
     if (!player) throw new Error(`Player ${playerId} not found`);
 
+    const broadcastEvents: BroadcastEvent[] = session.eventLog.map(ev => ({
+      type: ev.type,
+      message: formatEventMessage(ev),
+      timestamp: ev.timestamp,
+    }));
+
     const base: PlayerViewState = {
       sessionId,
       phase: session.phase,
@@ -388,7 +465,7 @@ export class GameEngine {
         isAlive: p.isAlive,
         traitorState: ('traitorState' in p ? p.traitorState : 'normal') as any,
       })),
-      broadcastEvents: [],
+      broadcastEvents,
       auditResults: [],
     };
 
@@ -422,6 +499,11 @@ export class GameEngine {
       base.publicGoal = owner.publicGoal;
     }
 
+    const aiRiskScores = (session as any).aiRiskScores as Record<string, number> | undefined;
+    if (aiRiskScores && Object.keys(aiRiskScores).length > 0) {
+      base.aiRiskScores = aiRiskScores;
+    }
+
     if (session.phase !== 'declaration' && session.phase !== 'scoring' && session.phase !== 'lobby') {
       const auditResults: AuditResultView[] = [];
       for (const p of Object.values(session.players)) {
@@ -441,6 +523,34 @@ export class GameEngine {
         }
       }
       base.auditResults = auditResults;
+    }
+
+    const roundDist = (session as any).lastRoundDistribution as RoundDistributionData | undefined;
+    if (roundDist && (session.phase === 'distribution' || session.phase === 'trading'
+      || session.phase === 'final_reveal' || session.phase === 'final_audit')) {
+      base.roundDistribution = roundDist;
+    }
+
+    if (session.phase === 'final_reveal' || session.phase === 'final_audit'
+      || session.phase === 'final_vote' || session.phase === 'settlement' || session.phase === 'finished') {
+      const revealData: RevealEntry[] = [];
+      for (const p of Object.values(session.players)) {
+        if (p.role === 'miner') {
+          const miner = p as MinerState;
+          for (const rd of miner.roundData) {
+            revealData.push({
+              minerId: miner.playerId,
+              round: rd.round,
+              declaredQuality: rd.declaredQuality ?? 0,
+              trueQuality: rd.trueQuality,
+              isCheat: rd.isCheat,
+              penaltyType: rd.penaltyType,
+              penaltyAmount: rd.penaltyAmount,
+            });
+          }
+        }
+      }
+      base.revealData = revealData;
     }
 
     if (session.phase === 'settlement' || session.phase === 'finished') {
@@ -503,5 +613,46 @@ export class GameEngine {
       to: newPhase,
       timestamp: Date.now(),
     });
+  }
+}
+
+function formatEventMessage(ev: GameEvent): string {
+  switch (ev.type) {
+    case 'phase_changed':
+      return `阶段变更：${ev.from} → ${ev.to}`;
+    case 'miner_quality_sent':
+      return `矿工 ${ev.minerId.slice(0, 8)} 第${ev.round}轮真实质量: ${ev.trueQuality}星`;
+    case 'miner_declared':
+      return `矿工 ${ev.minerId.slice(0, 8)} 声明 ${ev.declared}星 (真实${ev.true}星)${ev.isCheat ? ' ⚠虚报' : ' ✓诚实'}`;
+    case 'validator_clue_sent':
+      return `验证者 ${ev.validatorId.slice(0, 8)} 收到线索`;
+    case 'validator_scored':
+      return `验证者 ${ev.validatorId.slice(0, 8)} 给矿工 ${ev.minerId.slice(0, 8)} 打分: ${ev.score}`;
+    case 'validator_reported':
+      return `验证者 ${ev.validatorId.slice(0, 8)} 举报矿工 ${ev.minerId.slice(0, 8)} 虚报`;
+    case 'owner_audited':
+      return `所有者审计矿工 ${ev.minerId.slice(0, 8)}: ${ev.result === 'cheat_confirmed' ? '虚报确认' : '诚实确认'} (花费${ev.cost}筹码)`;
+    case 'penalty_applied':
+      return `矿工 ${ev.minerId.slice(0, 8)} 被罚款 ${ev.amount} 筹码 (${ev.penaltyType})`;
+    case 'report_reward':
+      return `验证者 ${ev.validatorId.slice(0, 8)} 举报成功，获得 ${ev.amount} 筹码`;
+    case 'round_distributed':
+      return `第${ev.round}轮收益分配完成`;
+    case 'chips_distributed':
+      return `${ev.recipientId.slice(0, 8)} 获得 ${ev.amount} 筹码: ${ev.reason}`;
+    case 'vote_cast':
+      return `${ev.voterId.slice(0, 8)} 投了 ${ev.vote === 'for' ? '赞成' : '反对'}票`;
+    case 'collusion_detected':
+      return `检测到验证者 ${ev.validatorId.slice(0, 8)} 合谋，罚款 ${ev.penalty} 筹码`;
+    case 'player_kicked':
+      return `${ev.playerId.slice(0, 8)} 被踢出: ${ev.reason}`;
+    case 'traitor_recruited':
+      return `叛徒 ${ev.traitorId.slice(0, 8)} 招募了 ${ev.targetId.slice(0, 8)}`;
+    case 'traitor_defected':
+      return `${ev.defectorId.slice(0, 8)} 背叛叛徒 ${ev.traitorId.slice(0, 8)}`;
+    case 'reveal_entry':
+      return `终局揭示：矿工 ${ev.minerId.slice(0, 8)} 第${ev.round}轮 声明${ev.declared}/真实${ev.true} ${ev.isCheat ? '虚报' : '诚实'}`;
+    default:
+      return `事件: ${(ev as any).type ?? 'unknown'}`;
   }
 }

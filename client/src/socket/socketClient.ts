@@ -92,12 +92,8 @@ export function emitDeclaration(declaredQuality: number) {
   getSocket().emit('player:declare', { declaredQuality });
 }
 
-export function emitScores(scores: Record<string, number>) {
-  getSocket().emit('player:score', { scores });
-}
-
-export function emitReports(minerIds: string[]) {
-  getSocket().emit('player:report', { minerIds });
+export function emitScores(scores: Record<string, number>, reportMinerIds?: string[]) {
+  getSocket().emit('player:score', { scores, reportMinerIds: reportMinerIds ?? [] });
 }
 
 export function emitAudit(minerIds: string[], depth?: 'shallow' | 'deep') {
