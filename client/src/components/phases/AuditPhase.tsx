@@ -1,25 +1,25 @@
 import React, { useState } from 'react';
 import { useGameStore } from '../../store/gameStore';
 import { useGameState } from '../../hooks/useGameState';
-import { emitAudit, emitAIAnalysis } from '../../socket/socketClient';
+import { emitAIAnalysis, emitAudit } from '../../socket/socketClient';
 
 export default function AuditPhase() {
   const { view, myRole } = useGameState();
-  const { pendingAuditTargets, toggleAuditTarget } = useGameStore();
+  const pendingAuditTargets = useGameStore((state) => state.pendingAuditTargets);
+  const toggleAuditTarget = useGameStore((state) => state.toggleAuditTarget);
   const [auditDepth, setAuditDepth] = useState<'shallow' | 'deep'>('shallow');
-  const aiRiskScores = view?.aiRiskScores;
 
+  const aiRiskScores = view?.aiRiskScores;
   const costPerMiner = auditDepth === 'deep' ? 3 : 1;
   const totalCost = pendingAuditTargets.length * costPerMiner;
 
   const handleAudit = () => {
-    if (pendingAuditTargets.length > 0) {
-      emitAudit(pendingAuditTargets, auditDepth);
-    }
+    if (pendingAuditTargets.length === 0) return;
+    emitAudit(pendingAuditTargets, auditDepth);
   };
 
-  const handleAI = (level: 'low' | 'mid' | 'high') => {
-    emitAIAnalysis(level, false);
+  const handleAI = (level: 'low' | 'mid' | 'high', isPublic: boolean) => {
+    emitAIAnalysis(level, isPublic);
   };
 
   if (myRole !== 'subnet_owner') {
@@ -28,21 +28,21 @@ export default function AuditPhase() {
         <p className="text-xl text-gray-400">子网所有者正在进行审计，请稍候...</p>
         {view?.auditResults && view.auditResults.length > 0 && (
           <div className="mt-8 grid grid-cols-1 gap-4 max-w-md mx-auto">
-             {view.auditResults.map(res => (
-               <div key={res.minerId} className="bg-gray-800 p-3 rounded border border-gray-700 flex justify-between">
-                 <span>{res.minerId}</span>
-                 <span className={res.isCheat ? 'text-red-400' : 'text-green-400'}>
-                   {res.isCheat ? `虚报 (真:${res.trueQuality})` : '诚实'}
-                 </span>
-               </div>
-             ))}
+            {view.auditResults.map((res) => (
+              <div key={res.minerId} className="bg-gray-800 p-3 rounded border border-gray-700 flex justify-between">
+                <span>{res.minerId}</span>
+                <span className={res.isCheat ? 'text-red-400' : 'text-green-400'}>
+                  {res.isCheat ? `虚报 (真:${res.trueQuality})` : '诚实'}
+                </span>
+              </div>
+            ))}
           </div>
         )}
       </div>
     );
   }
 
-  const miners = view?.players.filter(p => p.role === 'miner') || [];
+  const miners = view?.players.filter((p) => p.role === 'miner') ?? [];
 
   return (
     <div className="w-full max-w-4xl">
@@ -103,12 +103,7 @@ export default function AuditPhase() {
             }`}
           >
             <div className="text-lg font-bold mb-1">{miner.playerId}</div>
-            <div className="text-xs text-gray-500">筹码: {miner.chips}</div>
-            {aiRiskScores?.[miner.playerId] !== undefined && (
-              <div className={`text-xs mt-1 font-mono ${aiRiskScores[miner.playerId] > 60 ? 'text-red-400' : 'text-yellow-400'}`}>
-                风险 {aiRiskScores[miner.playerId]}%
-              </div>
-            )}
+            <div className="text-xs text-gray-500">点击选择</div>
           </button>
         ))}
       </div>
@@ -117,12 +112,14 @@ export default function AuditPhase() {
         <h4 className="font-bold mb-4 text-purple-400">审计工具</h4>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <button
-            onClick={() => handleAudit()}
+            onClick={handleAudit}
             disabled={pendingAuditTargets.length === 0}
             className={`p-4 rounded-lg text-left transition ${
               pendingAuditTargets.length === 0
                 ? 'bg-gray-700 opacity-50 cursor-not-allowed'
-                : auditDepth === 'deep' ? 'bg-red-900/40 hover:bg-red-800/40 border border-red-700' : 'bg-gray-700 hover:bg-gray-600'
+                : auditDepth === 'deep'
+                  ? 'bg-red-900/40 hover:bg-red-800/40 border border-red-700'
+                  : 'bg-gray-700 hover:bg-gray-600'
             }`}
           >
             <div className="font-bold">{auditDepth === 'deep' ? '🔍 深度审计' : '👁 浅审计'}</div>
@@ -131,24 +128,31 @@ export default function AuditPhase() {
             </div>
             <div className="text-xs text-gray-500 mt-1">选中 {pendingAuditTargets.length} 人，共 {totalCost} 筹码</div>
           </button>
-          {!aiRiskScores && (
-            <button
-              onClick={() => handleAI('low')}
-              className="p-4 bg-purple-900/40 hover:bg-purple-800/40 border border-purple-700 rounded-lg text-left"
-            >
-              <div className="font-bold">AI 初级分析 (1 筹码)</div>
-              <div className="text-xs text-gray-400">输出各矿工虚报风险评分 (0-100)。整局限 1 次。</div>
-            </button>
-          )}
-          {!aiRiskScores && (
-            <button
-              onClick={() => handleAI('mid')}
-              className="p-4 bg-purple-900/40 hover:bg-purple-800/40 border border-purple-700 rounded-lg text-left"
-            >
-              <div className="font-bold">AI 进阶分析 (3 筹码)</div>
-              <div className="text-xs text-gray-400">更高精度的风险评分。</div>
-            </button>
-          )}
+
+          <div className="p-4 bg-gray-900/40 border border-gray-700 rounded-lg text-left">
+            <div className="font-bold text-purple-300 mb-2">AI 风险分析</div>
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                onClick={() => handleAI('low', false)}
+                className="py-2 bg-purple-900/30 hover:bg-purple-900/40 border border-purple-800 rounded text-sm"
+              >
+                基础
+              </button>
+              <button
+                onClick={() => handleAI('mid', false)}
+                className="py-2 bg-purple-900/30 hover:bg-purple-900/40 border border-purple-800 rounded text-sm"
+              >
+                进阶
+              </button>
+              <button
+                onClick={() => handleAI('high', true)}
+                className="py-2 bg-purple-900/30 hover:bg-purple-900/40 border border-purple-800 rounded text-sm"
+              >
+                深度(公开)
+              </button>
+            </div>
+            <div className="text-xs text-gray-500 mt-2">输出为 risk_score（0-100），用于辅助审计选择；不参与最终裁判。</div>
+          </div>
         </div>
       </div>
     </div>

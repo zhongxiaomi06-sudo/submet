@@ -15,7 +15,7 @@ export default function DistributionPhase() {
              <span className="mr-2">Miner</span> 收益排名
           </h4>
           <div className="space-y-3">
-             {view?.players.filter(p => p.role === 'miner').sort((a,b) => b.chips - a.chips).map((p, idx) => (
+             {view?.players.filter(p => p.role === 'miner').map((p, idx) => (
                <div key={p.playerId} className="flex justify-between items-center p-3 bg-gray-900/50 rounded">
                  <div className="flex items-center">
                    <span className="w-6 h-6 flex items-center justify-center bg-gray-700 rounded-full text-xs mr-3">{idx + 1}</span>

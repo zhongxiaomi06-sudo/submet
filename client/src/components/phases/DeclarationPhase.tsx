@@ -4,12 +4,14 @@ import { useGameState } from '../../hooks/useGameState';
 import { emitDeclaration } from '../../socket/socketClient';
 
 export default function DeclarationPhase() {
-  const { view, myRole } = useGameState();
+  const { view, myRole, sessionId } = useGameState();
   const selectedStars = useGameStore((state) => state.selectedStars);
   const setSelectedStars = useGameStore((state) => state.setSelectedStars);
+  const resetPending = useGameStore((state) => state.resetPending);
 
   const handleSubmit = () => {
     emitDeclaration(selectedStars);
+    resetPending();
   };
 
   if (myRole !== 'miner') {

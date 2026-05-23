@@ -20,9 +20,46 @@ export interface PublicPlayerInfo {
   playerId: string;
   role: RoleId;
   playerType: PlayerType;
-  chips: number;
   isAlive: boolean;
   traitorState: TraitorState;
+  chips?: number;
+  isKicked?: boolean;
+}
+
+export type AuditMode = 'shallow' | 'deep' | 'final_deep';
+export type AiAnalysisLevel = 'low' | 'mid' | 'high';
+
+export interface AiRiskScoreEntry {
+  minerId: string;
+  riskScore: number;
+  suspiciousFeatures?: Array<{
+    feature: string;
+    severity: number;
+    description: string;
+  }>;
+  modelVersion?: number;
+}
+
+export type ChatChannel = 'public' | 'direct';
+
+export interface ChatMessage {
+  messageId: string;
+  channel: ChatChannel;
+  fromPlayerId: string;
+  toPlayerId?: string;
+  content: string;
+  timestamp: number;
+}
+
+export interface TraitorContractOffer {
+  offerId: string;
+  traitorId: string;
+  targetId: string;
+  bribe: number;
+  task: string;
+  state: 'pending' | 'contracted' | 'rejected' | 'completed' | 'cancelled';
+  createdAt: number;
+  resolvedAt?: number;
 }
 
 export interface MinerState {
@@ -136,8 +173,10 @@ export interface PlayerViewState {
   auditHistory?: AuditRecord[];
   confirmedCheats?: number;
   publicGoal?: string;
+  // 逐步揭示
   auditResults?: AuditResultView[];
   auditDepth?: AuditDepth;
+  // 终局
   contractPassed?: boolean;
   revealData?: RevealEntry[];
   settlement?: SettlementData;

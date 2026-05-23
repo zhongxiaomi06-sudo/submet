@@ -1,9 +1,15 @@
+import { useEffect } from 'react';
 import { Routes, Route } from 'react-router-dom';
+import { connectSocket } from './socket/socketClient';
 import HomePage from './pages/HomePage';
 import RoomPage from './pages/RoomPage';
 import GamePage from './pages/GamePage';
 
 export default function App() {
+  useEffect(() => {
+    connectSocket();
+  }, []);
+
   return (
     <Routes>
       <Route path="/" element={<HomePage />} />

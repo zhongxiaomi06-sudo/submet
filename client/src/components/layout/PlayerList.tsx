@@ -26,7 +26,9 @@ export default function PlayerList() {
               </span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-xs text-gray-500">筹码: {p.chips}</span>
+              <span className="text-xs text-gray-500">
+                筹码: {p.playerId === myPlayerId ? (view?.myChips ?? 0) : '—'}
+              </span>
               {p.traitorState !== 'normal' && (
                 <span className="text-[10px] text-red-400">● 契约中</span>
               )}

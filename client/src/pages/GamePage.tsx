@@ -11,8 +11,10 @@ import AuditPhase from '../components/phases/AuditPhase';
 import DistributionPhase from '../components/phases/DistributionPhase';
 import TradingPhase from '../components/phases/TradingPhase';
 import FinalRevealPhase from '../components/phases/FinalRevealPhase';
+import FinalAuditPhase from '../components/phases/FinalAuditPhase';
 import FinalVotePhase from '../components/phases/FinalVotePhase';
 import SettlementPhase from '../components/phases/SettlementPhase';
+import FinishedPhase from '../components/phases/FinishedPhase';
 
 export default function GamePage() {
   const { phase, round } = useGameState();
@@ -35,11 +37,15 @@ export default function GamePage() {
         return <TradingPhase />;
       case 'final_reveal':
         return <FinalRevealPhase />;
+      case 'final_audit':
+        return <FinalAuditPhase />;
       case 'final_vote':
         return <FinalVotePhase />;
       case 'settlement':
       case 'finished':
         return <SettlementPhase />;
+      case 'finished':
+        return <FinishedPhase />;
       case 'lobby':
         return <div className="text-center text-gray-400">游戏即将开始...</div>;
       default:

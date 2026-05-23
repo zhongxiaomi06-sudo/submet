@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { PlayerViewState, RoleId } from '../../../shared/types/game';
+import type { ChatMessage, PlayerViewState, RoleId, TraitorContractOffer } from '../../../shared/types/game';
 
 interface GameStore {
   connected: boolean;
@@ -9,6 +9,8 @@ interface GameStore {
   myRole: RoleId | null;
   view: PlayerViewState | null;
   roleCounts: Record<string, { filled: number; max: number }> | null;
+  chatMessages: ChatMessage[];
+  traitorContracts: TraitorContractOffer[];
 
   selectedStars: number;
   pendingScores: Record<string, number>;
@@ -18,8 +20,11 @@ interface GameStore {
 
   setConnected: (v: boolean) => void;
   setRoom: (roomId: string, playerId: string, role: RoleId) => void;
+  setSessionId: (sessionId: string) => void;
   setView: (view: PlayerViewState) => void;
   setRoleCounts: (counts: Record<string, { filled: number; max: number }> | null) => void;
+  pushChatMessage: (msg: ChatMessage) => void;
+  setTraitorContracts: (contracts: TraitorContractOffer[]) => void;
   setSelectedStars: (n: number) => void;
   setPendingScore: (minerId: string, score: number) => void;
   toggleReport: (minerId: string) => void;
@@ -35,6 +40,8 @@ export const useGameStore = create<GameStore>((set) => ({
   myPlayerId: null,
   myRole: null,
   view: null,
+  chatMessages: [],
+  traitorContracts: [],
   roleCounts: null,
 
   selectedStars: 0,
@@ -43,12 +50,23 @@ export const useGameStore = create<GameStore>((set) => ({
   pendingAuditTargets: [],
   pendingKickList: [],
 
+  setSessionId: (sessionId: string) => set({ sessionId }),
   setConnected: (connected: boolean) => set({ connected }),
-  setRoom: (roomId: string, myPlayerId: string, myRole: RoleId) => set({
-    roomId, myPlayerId, myRole,
-    selectedStars: 0, pendingScores: {}, pendingReports: [], pendingAuditTargets: [], pendingKickList: [],
-  }),
+  setRoom: (roomId: string, myPlayerId: string, myRole: RoleId) =>
+    set({
+      roomId,
+      myPlayerId,
+      myRole,
+      selectedStars: 0,
+      pendingScores: {},
+      pendingReports: [],
+      pendingAuditTargets: [],
+      pendingKickList: [],
+    }),
   setView: (view: PlayerViewState) => set({ view, sessionId: view.sessionId }),
+  pushChatMessage: (msg: ChatMessage) =>
+    set((state: GameStore) => ({ chatMessages: [...state.chatMessages, msg] })),
+  setTraitorContracts: (traitorContracts: TraitorContractOffer[]) => set({ traitorContracts }),
   setRoleCounts: (roleCounts) => set({ roleCounts }),
   setSelectedStars: (selectedStars: number) => set({ selectedStars }),
   setPendingScore: (minerId: string, score: number) =>

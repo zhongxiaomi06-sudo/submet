@@ -3,7 +3,7 @@ import { useGameState } from '../../hooks/useGameState';
 import { emitVote } from '../../socket/socketClient';
 
 export default function FinalVotePhase() {
-  const { view, myRole } = useGameState();
+  const { view, myRole, sessionId } = useGameState();
 
   const handleVote = (vote: 'for' | 'against') => {
     emitVote(vote);
@@ -22,7 +22,8 @@ export default function FinalVotePhase() {
         <div className="flex justify-around items-center">
           <button
             onClick={() => handleVote('for')}
-            className="group flex flex-col items-center"
+            disabled={!sessionId}
+            className="group flex flex-col items-center disabled:opacity-50"
           >
             <div className="w-20 h-20 bg-green-600 group-hover:bg-green-500 rounded-full flex items-center justify-center text-4xl mb-2 transition">
               👍
@@ -34,7 +35,8 @@ export default function FinalVotePhase() {
 
           <button
             onClick={() => handleVote('against')}
-            className="group flex flex-col items-center"
+            disabled={!sessionId}
+            className="group flex flex-col items-center disabled:opacity-50"
           >
             <div className="w-20 h-20 bg-red-600 group-hover:bg-red-500 rounded-full flex items-center justify-center text-4xl mb-2 transition">
               👎

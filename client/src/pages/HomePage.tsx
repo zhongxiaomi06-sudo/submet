@@ -35,13 +35,13 @@ export default function HomePage() {
       getSocket().emit('room:join', { roomId, preferredRole: selectedRole });
     };
 
-    const onJoined = ({ playerId, role }: any) => {
+    const onJoined = ({ playerId, role }: { playerId: string; role: RoleId }) => {
       useGameStore.getState().setRoom(roomId, playerId, role);
       cleanup();
       navigate(`/room/${roomId}`);
     };
 
-    const onError = ({ message }: any) => {
+    const onError = ({ message }: { message: string }) => {
       cleanup();
       setError(message);
       setConnecting(false);
@@ -69,7 +69,10 @@ export default function HomePage() {
 
   const handleJoinRoom = () => {
     const id = joinRoomId.trim().toLowerCase();
-    if (!id) { setError('请输入房间号'); return; }
+    if (!id) {
+      setError('请输入房间号');
+      return;
+    }
     setConnecting(true);
     setError('');
     navigateToRoom(id);
@@ -127,7 +130,7 @@ export default function HomePage() {
             disabled={connecting}
             className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded transition duration-200 disabled:opacity-50"
           >
-            {connecting ? '连接中...' : `创建房间（以${ROLE_OPTIONS.find(r => r.value === selectedRole)?.label}身份）`}
+            {connecting ? '连接中...' : `创建房间（以${ROLE_OPTIONS.find((r) => r.value === selectedRole)?.label}身份）`}
           </button>
         ) : (
           <div>
@@ -137,7 +140,7 @@ export default function HomePage() {
               onChange={(e) => setJoinRoomId(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleJoinRoom()}
               placeholder="输入房间号..."
-              maxLength={6}
+              maxLength={12}
               className="w-full p-3 mb-3 bg-gray-700 border border-gray-600 rounded focus:outline-none focus:border-blue-500 text-center text-lg font-mono tracking-widest placeholder-gray-500"
             />
             <button
@@ -145,7 +148,7 @@ export default function HomePage() {
               disabled={connecting || !joinRoomId.trim()}
               className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded transition duration-200 disabled:opacity-50"
             >
-              {connecting ? '连接中...' : `加入房间（以${ROLE_OPTIONS.find(r => r.value === selectedRole)?.label}身份）`}
+              {connecting ? '连接中...' : `加入房间（以${ROLE_OPTIONS.find((r) => r.value === selectedRole)?.label}身份）`}
             </button>
           </div>
         )}

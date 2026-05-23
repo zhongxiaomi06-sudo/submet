@@ -5,23 +5,28 @@ export const useGameState = () => {
   const myPlayerId = useGameStore((state) => state.myPlayerId);
   const myRole = useGameStore((state) => state.myRole);
   const connected = useGameStore((state) => state.connected);
+  const sessionId = useGameStore((state) => state.sessionId);
+  const chatMessages = useGameStore((state) => state.chatMessages);
+  const traitorContracts = useGameStore((state) => state.traitorContracts);
+
+  const phase = view?.phase ?? 'lobby';
+  const isMyTurn =
+    phase === 'final_vote' ||
+    (myRole === 'miner' && phase === 'declaration') ||
+    (myRole === 'validator' && phase === 'scoring') ||
+    (myRole === 'subnet_owner' && (phase === 'audit' || phase === 'final_audit'));
 
   return {
     view,
     myPlayerId,
     myRole,
     connected,
-    phase: view?.phase ?? 'lobby',
+    sessionId,
+    chatMessages,
+    traitorContracts,
+    phase,
     round: view?.round ?? 0,
     myChips: view?.myChips ?? 0,
-    isMyTurn: ((): boolean => {
-      const phase = view?.phase;
-      const role = myRole;
-      if (phase === 'declaration' && role === 'miner') return true;
-      if (phase === 'scoring' && role === 'validator') return true;
-      if (phase === 'audit' && role === 'subnet_owner') return true;
-      if (phase === 'final_vote') return true;
-      return false;
-    })(),
+    isMyTurn,
   };
 };
