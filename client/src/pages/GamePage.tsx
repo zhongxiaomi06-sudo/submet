@@ -42,7 +42,6 @@ export default function GamePage() {
       case 'final_vote':
         return <FinalVotePhase />;
       case 'settlement':
-      case 'finished':
         return <SettlementPhase />;
       case 'finished':
         return <FinishedPhase />;

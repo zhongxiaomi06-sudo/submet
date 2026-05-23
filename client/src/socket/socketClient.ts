@@ -6,7 +6,7 @@ let socket: Socket | null = null;
 
 export function getSocket(): Socket {
   if (!socket) {
-    socket = io('http://localhost:3001', { autoConnect: false });
+    socket = io({ autoConnect: false, path: '/socket.io' });
   }
   return socket;
 }

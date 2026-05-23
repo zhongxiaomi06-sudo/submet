@@ -58,7 +58,7 @@ export default function HomePage() {
     setConnecting(true);
     setError('');
     try {
-      const res = await fetch('http://localhost:3001/api/rooms', { method: 'POST' });
+      const res = await fetch('/api/rooms', { method: 'POST' });
       const { roomId } = await res.json();
       navigateToRoom(roomId);
     } catch {
