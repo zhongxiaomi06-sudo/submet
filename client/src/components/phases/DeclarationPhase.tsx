@@ -1,7 +1,7 @@
 import React from 'react';
 import { useGameStore } from '../../store/gameStore';
 import { useGameState } from '../../hooks/useGameState';
-import { emitEvent } from '../../socket/socketClient';
+import { emitDeclaration } from '../../socket/socketClient';
 
 export default function DeclarationPhase() {
   const { view, myRole } = useGameState();
@@ -9,7 +9,7 @@ export default function DeclarationPhase() {
   const setSelectedStars = useGameStore((state) => state.setSelectedStars);
 
   const handleSubmit = () => {
-    emitEvent('submit_declaration', { quality: selectedStars });
+    emitDeclaration(selectedStars);
   };
 
   if (myRole !== 'miner') {

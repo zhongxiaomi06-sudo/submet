@@ -1,12 +1,12 @@
 import React from 'react';
 import { useGameState } from '../../hooks/useGameState';
-import { emitEvent } from '../../socket/socketClient';
+import { emitRecruit } from '../../socket/socketClient';
 
 export default function TradingPhase() {
   const { myRole, view } = useGameState();
 
   const handleRecruit = (targetId: string) => {
-    emitEvent('recruit_traitor', { targetId, bribe: 2 }); // 默认贿赂 2
+    emitRecruit(targetId, 2, '');
   };
 
   return (

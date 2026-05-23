@@ -1,17 +1,15 @@
 import React from 'react';
 import { useGameStore } from '../../store/gameStore';
 import { useGameState } from '../../hooks/useGameState';
-import { emitEvent } from '../../socket/socketClient';
+import { emitScores, emitReports } from '../../socket/socketClient';
 
 export default function ScoringPhase() {
   const { view, myRole } = useGameState();
   const { pendingScores, setPendingScore, pendingReports, toggleReport } = useGameStore();
 
   const handleSubmit = () => {
-    emitEvent('submit_scores', { 
-      scores: pendingScores, 
-      reports: pendingReports 
-    });
+    emitScores(pendingScores);
+    if (pendingReports.length > 0) emitReports(pendingReports);
   };
 
   if (myRole !== 'validator') {

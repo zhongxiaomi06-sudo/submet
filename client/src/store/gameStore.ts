@@ -2,31 +2,29 @@ import { create } from 'zustand';
 import type { PlayerViewState, RoleId } from '../../../shared/types/game';
 
 interface GameStore {
-  // 连接状态
   connected: boolean;
-  // 房间
   roomId: string | null;
   sessionId: string | null;
   myPlayerId: string | null;
   myRole: RoleId | null;
-  // 游戏视图（服务端推送）
   view: PlayerViewState | null;
+  roleCounts: Record<string, { filled: number; max: number }> | null;
 
-  // 本地 UI 暂存
   selectedStars: number;
   pendingScores: Record<string, number>;
   pendingReports: string[];
   pendingAuditTargets: string[];
   pendingKickList: string[];
 
-  // Actions
   setConnected: (v: boolean) => void;
   setRoom: (roomId: string, playerId: string, role: RoleId) => void;
   setView: (view: PlayerViewState) => void;
+  setRoleCounts: (counts: Record<string, { filled: number; max: number }> | null) => void;
   setSelectedStars: (n: number) => void;
   setPendingScore: (minerId: string, score: number) => void;
   toggleReport: (minerId: string) => void;
   toggleAuditTarget: (minerId: string) => void;
+  toggleKick: (minerId: string) => void;
   resetPending: () => void;
 }
 
@@ -37,6 +35,7 @@ export const useGameStore = create<GameStore>((set) => ({
   myPlayerId: null,
   myRole: null,
   view: null,
+  roleCounts: null,
 
   selectedStars: 0,
   pendingScores: {},
@@ -45,12 +44,16 @@ export const useGameStore = create<GameStore>((set) => ({
   pendingKickList: [],
 
   setConnected: (connected: boolean) => set({ connected }),
-  setRoom: (roomId: string, myPlayerId: string, myRole: RoleId) => set({ roomId, myPlayerId, myRole }),
+  setRoom: (roomId: string, myPlayerId: string, myRole: RoleId) => set({
+    roomId, myPlayerId, myRole,
+    selectedStars: 0, pendingScores: {}, pendingReports: [], pendingAuditTargets: [], pendingKickList: [],
+  }),
   setView: (view: PlayerViewState) => set({ view, sessionId: view.sessionId }),
+  setRoleCounts: (roleCounts) => set({ roleCounts }),
   setSelectedStars: (selectedStars: number) => set({ selectedStars }),
-  setPendingScore: (minerId: string, score: number) => 
-    set((state: GameStore) => ({ 
-      pendingScores: { ...state.pendingScores, [minerId]: score } 
+  setPendingScore: (minerId: string, score: number) =>
+    set((state: GameStore) => ({
+      pendingScores: { ...state.pendingScores, [minerId]: score }
     })),
   toggleReport: (minerId: string) =>
     set((state: GameStore) => ({
@@ -63,6 +66,12 @@ export const useGameStore = create<GameStore>((set) => ({
       pendingAuditTargets: state.pendingAuditTargets.includes(minerId)
         ? state.pendingAuditTargets.filter((id: string) => id !== minerId)
         : [...state.pendingAuditTargets, minerId],
+    })),
+  toggleKick: (minerId: string) =>
+    set((state: GameStore) => ({
+      pendingKickList: state.pendingKickList.includes(minerId)
+        ? state.pendingKickList.filter((id: string) => id !== minerId)
+        : [...state.pendingKickList, minerId],
     })),
   resetPending: () =>
     set({

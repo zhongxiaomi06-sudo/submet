@@ -1,8 +1,6 @@
-// ====== 角色 ======
 export type RoleId = 'subnet_owner' | 'validator' | 'miner';
 export type PlayerType = 'human' | 'bot';
 
-// ====== 游戏阶段 ======
 export type GamePhase =
   | 'lobby'
   | 'declaration'
@@ -16,10 +14,8 @@ export type GamePhase =
   | 'settlement'
   | 'finished';
 
-// ====== 叛徒状态 ======
 export type TraitorState = 'normal' | 'contracted' | 'traitor';
 
-// ====== 玩家基础信息 ======
 export interface PublicPlayerInfo {
   playerId: string;
   role: RoleId;
@@ -29,7 +25,6 @@ export interface PublicPlayerInfo {
   traitorState: TraitorState;
 }
 
-// ====== 矿工 ======
 export interface MinerState {
   playerId: string;
   role: 'miner';
@@ -51,7 +46,6 @@ export interface RoundMinerData {
   penaltyAmount: number;
 }
 
-// ====== 验证者 ======
 export interface ValidatorState {
   playerId: string;
   role: 'validator';
@@ -73,7 +67,6 @@ export interface RoundValidatorData {
   reportsCost: number;
 }
 
-// ====== 子网所有者 ======
 export interface SubnetOwnerState {
   playerId: string;
   role: 'subnet_owner';
@@ -100,10 +93,8 @@ export interface AuditRecord {
   result: 'cheat_confirmed' | 'honest_confirmed';
 }
 
-// ====== 统一类型 ======
 export type PlayerState = MinerState | ValidatorState | SubnetOwnerState;
 
-// ====== 游戏会话 ======
 export interface GameSession {
   sessionId: string;
   phase: GamePhase;
@@ -118,7 +109,6 @@ export interface GameSession {
   finishedAt: string | null;
 }
 
-// ====== 前端视图（服务端过滤后推送） ======
 export interface PlayerViewState {
   sessionId: string;
   phase: GamePhase;
@@ -132,25 +122,22 @@ export interface PlayerViewState {
   remainingSeconds: number;
   players: PublicPlayerInfo[];
   broadcastEvents: BroadcastEvent[];
-  // 仅矿工
   myTrueQuality?: number;
   myDeclaredQuality?: number;
   myRank?: number;
   isTraitor?: boolean;
-  // 仅验证者
   validatorClue?: string;
   myScores?: Record<string, number>;
   myReports?: string[];
-  // 仅所有者
   ownerVoteWeight?: number;
   aiAnalysisAvailable?: boolean;
   aiAnalysisUsed?: boolean;
+  aiRiskScores?: Record<string, number>;
   auditHistory?: AuditRecord[];
   confirmedCheats?: number;
   publicGoal?: string;
-  // 逐步揭示
   auditResults?: AuditResultView[];
-  // 终局
+  auditDepth?: AuditDepth;
   contractPassed?: boolean;
   revealData?: RevealEntry[];
   settlement?: SettlementData;
@@ -164,12 +151,25 @@ export interface BroadcastEvent {
   timestamp: number;
 }
 
+export type AuditDepth = 'shallow' | 'deep';
+
 export interface AuditResultView {
   minerId: string;
   trueQuality: number;
   isCheat: boolean;
   penaltyAmount: number;
+  auditDepth?: AuditDepth;
 }
+
+export interface AuditResult {
+  minerId: string;
+  trueQuality: number;
+  isCheat: boolean;
+  penaltyAmount: number;
+  penaltyType: 'process' | 'reveal' | 'deep_audit';
+  auditDepth: AuditDepth;
+}
+
 
 export interface RevealEntry {
   minerId: string;
@@ -196,7 +196,6 @@ export interface SettlementData {
   publicGoalAchieved: boolean;
 }
 
-// ====== 游戏事件 ======
 export type GameEvent =
   | { type: 'miner_quality_sent'; minerId: string; trueQuality: number; round: number; timestamp: number }
   | { type: 'miner_declared'; minerId: string; declared: number; true: number; isCheat: boolean; round: number; timestamp: number }
@@ -216,7 +215,6 @@ export type GameEvent =
   | { type: 'traitor_defected'; defectorId: string; traitorId: string; penalty: number; timestamp: number }
   | { type: 'reveal_entry'; minerId: string; round: number; declared: number; true: number; isCheat: boolean; penaltyType: string; penaltyAmount: number; timestamp: number };
 
-// ====== V4.3 终端配置常量 ======
 export const CONFIG = {
   INITIAL_CHIPS: 15,
   OWNER_ALLOWANCE: 3,
@@ -228,6 +226,8 @@ export const CONFIG = {
   CHEAT_PENALTY_REVEAL: 1,
   CHEAT_PENALTY_DEEP: 3,
   AUDIT_COST: 1,
+  SHALLOW_AUDIT_COST: 1,
+  DEEP_AUDIT_COST: 3,
   REPORT_COST: 1,
   REPORT_REWARD: 4,
   ROUND_DISTRIBUTION: 6,

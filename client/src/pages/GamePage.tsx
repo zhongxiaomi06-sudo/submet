@@ -1,10 +1,10 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import TopBar from '../components/layout/TopBar';
 import PlayerList from '../components/layout/PlayerList';
 import EventLog from '../components/layout/EventLog';
 import { useGameState } from '../hooks/useGameState';
+import { connectSocket, getSocket } from '../socket/socketClient';
 
-// 导入各阶段组件
 import DeclarationPhase from '../components/phases/DeclarationPhase';
 import ScoringPhase from '../components/phases/ScoringPhase';
 import AuditPhase from '../components/phases/AuditPhase';
@@ -16,6 +16,10 @@ import SettlementPhase from '../components/phases/SettlementPhase';
 
 export default function GamePage() {
   const { phase, round } = useGameState();
+
+  useEffect(() => {
+    if (!getSocket().connected) connectSocket();
+  }, []);
 
   const renderPhaseContent = () => {
     switch (phase) {
@@ -34,6 +38,7 @@ export default function GamePage() {
       case 'final_vote':
         return <FinalVotePhase />;
       case 'settlement':
+      case 'finished':
         return <SettlementPhase />;
       case 'lobby':
         return <div className="text-center text-gray-400">游戏即将开始...</div>;
@@ -56,12 +61,10 @@ export default function GamePage() {
       <TopBar />
       
       <main className="flex flex-1 overflow-hidden">
-        {/* 左侧：玩家列表 */}
         <aside className="w-64 bg-gray-900 border-r border-gray-800">
           <PlayerList />
         </aside>
 
-        {/* 中间：主游戏区 */}
         <section className="flex-1 flex flex-col p-6 overflow-y-auto">
           <div className="mb-4">
             <h2 className="text-2xl font-bold text-blue-400 capitalize">
@@ -76,7 +79,6 @@ export default function GamePage() {
           </div>
         </section>
 
-        {/* 右侧：事件日志 */}
         <aside className="w-80 bg-gray-900 border-l border-gray-800 flex flex-col">
           <EventLog />
         </aside>

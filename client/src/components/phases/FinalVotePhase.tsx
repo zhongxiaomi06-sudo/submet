@@ -1,12 +1,12 @@
 import React from 'react';
 import { useGameState } from '../../hooks/useGameState';
-import { emitEvent } from '../../socket/socketClient';
+import { emitVote } from '../../socket/socketClient';
 
 export default function FinalVotePhase() {
   const { view, myRole } = useGameState();
 
   const handleVote = (vote: 'for' | 'against') => {
-    emitEvent('cast_vote', { vote });
+    emitVote(vote);
   };
 
   return (
