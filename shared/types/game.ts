@@ -179,6 +179,7 @@ export interface PlayerViewState {
   // 终局
   contractPassed?: boolean;
   revealData?: RevealEntry[];
+  kickedPlayers?: Array<{ playerId: string; reason: string }>;
   settlement?: SettlementData;
   myTaotaoReward?: number;
   myTaotaoNet?: number;

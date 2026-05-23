@@ -152,3 +152,11 @@ export function defectTraitor(sessionId: string, traitorId: string) {
 export function revealTraitor(sessionId: string, traitorId: string) {
   getSocket().emit('traitor:reveal', { sessionId, traitorId });
 }
+
+export function finalDeepAudit(sessionId: string, minerIds: string[]) {
+  getSocket().emit('game:final_deep_audit', { sessionId, minerIds });
+}
+
+export function kickPlayers(sessionId: string, playerIds: string[], reason: string) {
+  getSocket().emit('game:kick_players', { sessionId, playerIds, reason });
+}
