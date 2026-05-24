@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { Routes, Route, useNavigate } from 'react-router-dom';
+import { connectSocket } from './socket/socketClient';
+import LandingPage from './pages/LandingPage';
 import HomePage from './pages/HomePage';
 import RoomPage from './pages/RoomPage';
 import GamePage from './pages/GamePage';
@@ -155,13 +157,20 @@ function PosterPage() {
   );
 }
 
-export default function App() {
+function AppLayout() {
+  useEffect(() => {
+    connectSocket();
+  }, []);
+
   return (
     <Routes>
-      <Route path="/" element={<PosterPage />} />
+      <Route path="/" element={<LandingPage />} />
+      <Route path="/poster" element={<PosterPage />} />
       <Route path="/home" element={<HomePage />} />
       <Route path="/room/:roomId" element={<RoomPage />} />
       <Route path="/room/:roomId/game" element={<GamePage />} />
     </Routes>
   );
 }
+
+export default AppLayout;
