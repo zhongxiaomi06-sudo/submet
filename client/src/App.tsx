@@ -140,14 +140,6 @@ function PosterPage() {
           <p className="mt-5 text-lg md:text-xl text-gray-300/90">
             胜利者只有一个人吗。
           </p>
-
-          <div className="mt-10">
-            <div className="inline-flex items-center gap-3 px-6 py-3 rounded-xl border border-blue-400/30 bg-gray-900/40 backdrop-blur-md shadow-[0_0_0_1px_rgba(59,130,246,0.12),0_12px_30px_rgba(0,0,0,0.35)]">
-              <div className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_18px_rgba(16,185,129,0.55)]" />
-              <span className="text-sm font-semibold text-gray-100">点击任意位置进入</span>
-              <span className="text-sm text-gray-500">→</span>
-            </div>
-          </div>
         </div>
 
         <div className="absolute bottom-8 text-xs text-gray-500/80 tracking-wide">
