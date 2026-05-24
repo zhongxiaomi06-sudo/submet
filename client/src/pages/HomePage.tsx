@@ -21,15 +21,6 @@ export default function HomePage() {
   const navigateToRoom = (roomId: string) => {
     connectSocket();
     const sock = getSocket();
-    sock.removeAllListeners('connect');
-    sock.removeAllListeners('room:joined');
-    sock.removeAllListeners('error');
-
-    const cleanup = () => {
-      sock.off('connect', onConnect);
-      sock.off('room:joined', onJoined);
-      sock.off('error', onError);
-    };
 
     const onConnect = () => {
       getSocket().emit('room:join', { roomId, preferredRole: selectedRole });
@@ -37,21 +28,23 @@ export default function HomePage() {
 
     const onJoined = ({ playerId, role }: { playerId: string; role: RoleId }) => {
       useGameStore.getState().setRoom(roomId, playerId, role);
-      cleanup();
       navigate(`/room/${roomId}`);
     };
 
     const onError = ({ message }: { message: string }) => {
-      cleanup();
       setError(message);
       setConnecting(false);
     };
 
-    sock.on('connect', onConnect);
-    sock.on('room:joined', onJoined);
-    sock.on('error', onError);
+    sock.off('connect', onConnect);
+    sock.off('room:joined', onJoined);
+    sock.off('error', onError);
+
+    sock.once('room:joined', onJoined);
+    sock.once('error', onError);
 
     if (sock.connected) onConnect();
+    else sock.once('connect', onConnect);
   };
 
   const handleCreateRoom = async () => {

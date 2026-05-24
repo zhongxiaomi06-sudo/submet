@@ -3,6 +3,7 @@ import { useGameStore } from '../store/gameStore';
 import type { ChatMessage, TraitorContractOffer } from '../../../shared/types/game';
 
 let socket: Socket | null = null;
+let listenersWired = false;
 
 export function getSocket(): Socket {
   if (!socket) {
@@ -13,7 +14,11 @@ export function getSocket(): Socket {
 
 export function connectSocket(): void {
   const s = getSocket();
-  s.connect();
+  if (listenersWired) {
+    if (!s.connected) s.connect();
+    return;
+  }
+  listenersWired = true;
   const store = useGameStore.getState();
 
   s.on('connect', () => store.setConnected(true));
@@ -78,6 +83,8 @@ export function connectSocket(): void {
       auditDepth: payload.auditDepth,
     });
   });
+
+  s.connect();
 }
 
 export function emitJoinRoom(roomId: string, preferredRole?: string) {
