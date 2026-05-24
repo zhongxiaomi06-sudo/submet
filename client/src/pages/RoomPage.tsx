@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useGameStore } from '../store/gameStore';
 import { emitStartGame } from '../socket/socketClient';
@@ -23,9 +23,21 @@ export default function RoomPage() {
   const connected = useGameStore((state) => state.connected);
   const view = useGameStore((state) => state.view);
   const roleCounts = useGameStore((state) => state.roleCounts);
+  const lobbyPlayers = useGameStore((state) => state.lobbyPlayers);
   const [copied, setCopied] = useState(false);
 
-  const totalPlayers = view?.players?.length ?? 0;
+  const totalPlayers = useMemo(() => {
+    if (view?.players?.length) return view.players.length;
+    if (!roleCounts) return 0;
+    return Object.values(roleCounts).reduce((sum, c) => sum + (c.filled ?? 0), 0);
+  }, [roleCounts, view]);
+
+  const displayPlayers = useMemo(() => {
+    if (view?.players?.length) {
+      return view.players.map((p) => ({ playerId: p.playerId, role: p.role }));
+    }
+    return lobbyPlayers;
+  }, [lobbyPlayers, view]);
 
   const handleStart = () => {
     emitStartGame();
@@ -86,7 +98,7 @@ export default function RoomPage() {
             已加入玩家 ({totalPlayers}/7)
           </h3>
           <ul className="space-y-2 max-h-48 overflow-y-auto">
-            {view?.players?.length ? view.players.map((p) => (
+            {displayPlayers.length ? displayPlayers.map((p) => (
               <li key={p.playerId} className="flex justify-between items-center bg-gray-700 p-2 rounded text-sm">
                 <span className={p.playerId === myPlayerId ? 'text-blue-300' : ''}>
                   {p.playerId === myPlayerId ? '⭐ 你' : p.playerId.slice(0, 8)}

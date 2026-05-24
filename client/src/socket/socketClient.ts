@@ -1,6 +1,6 @@
 import { io, Socket } from 'socket.io-client';
 import { useGameStore } from '../store/gameStore';
-import type { ChatMessage, TraitorContractOffer } from '../../../shared/types/game';
+import type { ChatMessage, RoleId, TraitorContractOffer } from '../../../shared/types/game';
 
 let socket: Socket | null = null;
 let listenersWired = false;
@@ -53,9 +53,12 @@ export function connectSocket(): void {
     if (sessionId) useGameStore.getState().setSessionId(sessionId);
   });
 
-  s.on('room:player_joined', ({ roleCounts }: { roleCounts: Record<string, { filled: number; max: number }> }) => {
+  s.on('room:player_joined', ({ playerId, role, roleCounts }: { playerId?: string; role?: RoleId; roleCounts: Record<string, { filled: number; max: number }> }) => {
     if (roleCounts) {
       useGameStore.getState().setRoleCounts(roleCounts);
+    }
+    if (playerId && role) {
+      useGameStore.getState().upsertLobbyPlayer(playerId, role);
     }
   });
 

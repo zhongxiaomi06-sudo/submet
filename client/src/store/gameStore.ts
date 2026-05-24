@@ -8,6 +8,7 @@ interface GameStore {
   myPlayerId: string | null;
   myRole: RoleId | null;
   view: PlayerViewState | null;
+  lobbyPlayers: Array<{ playerId: string; role: RoleId }>;
   roleCounts: Record<string, { filled: number; max: number }> | null;
   chatMessages: ChatMessage[];
   traitorContracts: TraitorContractOffer[];
@@ -22,6 +23,7 @@ interface GameStore {
   setRoom: (roomId: string, playerId: string, role: RoleId) => void;
   setSessionId: (sessionId: string) => void;
   setView: (view: PlayerViewState) => void;
+  upsertLobbyPlayer: (playerId: string, role: RoleId) => void;
   setRoleCounts: (counts: Record<string, { filled: number; max: number }> | null) => void;
   pushChatMessage: (msg: ChatMessage) => void;
   setTraitorContracts: (contracts: TraitorContractOffer[]) => void;
@@ -40,6 +42,7 @@ export const useGameStore = create<GameStore>((set) => ({
   myPlayerId: null,
   myRole: null,
   view: null,
+  lobbyPlayers: [],
   chatMessages: [],
   traitorContracts: [],
   roleCounts: null,
@@ -57,6 +60,7 @@ export const useGameStore = create<GameStore>((set) => ({
       roomId,
       myPlayerId,
       myRole,
+      lobbyPlayers: [{ playerId: myPlayerId, role: myRole }],
       selectedStars: 0,
       pendingScores: {},
       pendingReports: [],
@@ -64,6 +68,16 @@ export const useGameStore = create<GameStore>((set) => ({
       pendingKickList: [],
     }),
   setView: (view: PlayerViewState) => set({ view, sessionId: view.sessionId }),
+  upsertLobbyPlayer: (playerId: string, role: RoleId) =>
+    set((state: GameStore) => {
+      const existing = state.lobbyPlayers.find((p) => p.playerId === playerId);
+      if (existing) {
+        return {
+          lobbyPlayers: state.lobbyPlayers.map((p) => (p.playerId === playerId ? { playerId, role } : p)),
+        };
+      }
+      return { lobbyPlayers: [...state.lobbyPlayers, { playerId, role }] };
+    }),
   pushChatMessage: (msg: ChatMessage) =>
     set((state: GameStore) => ({ chatMessages: [...state.chatMessages, msg] })),
   setTraitorContracts: (traitorContracts: TraitorContractOffer[]) => set({ traitorContracts }),
