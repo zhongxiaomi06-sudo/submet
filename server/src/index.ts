@@ -1,5 +1,6 @@
 import express from 'express';
 import http from 'http';
+import path from 'path';
 import cors from 'cors';
 import { Server as SocketIOServer } from 'socket.io';
 import { initDB } from './db/schema';
@@ -15,6 +16,9 @@ async function main() {
   app.use(cors());
   app.use(express.json());
 
+  const clientDist = path.join(__dirname, '..', '..', 'client', 'dist');
+  app.use(express.static(clientDist));
+
   await initDB();
 
   const roomManager = new RoomManager();
@@ -22,6 +26,10 @@ async function main() {
   setupRoutes(app, roomManager);
 
   setupSocketHandlers(io, roomManager);
+
+  app.get('*', (_req, res) => {
+    res.sendFile(path.join(clientDist, 'index.html'));
+  });
 
   const PORT = 3001;
   server.listen(PORT, () => console.log(`Undercurrent DEMO server on :${PORT}`));
