@@ -142,9 +142,6 @@ function PosterPage() {
           </p>
         </div>
 
-        <div className="absolute bottom-8 text-xs text-gray-500/80 tracking-wide">
-          HTML5 · CSS3 · JavaScript (ES6+)
-        </div>
       </div>
 
       <style>{`
